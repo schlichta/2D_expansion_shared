@@ -104,9 +104,10 @@ sbatch --array=1-200 ${script} ${model}
 &nbsp;
 #### Dispatch sims
 
-`model`: model name &nbsp;
+`model`: model name
+&nbsp;
 `n_samps`: number of individuals to be sampled at generation 3 of growth
-
+&nbsp;
 
 ```bash
 model=f4_m20_g5_mx20_tot_mig
@@ -143,6 +144,8 @@ sbatch --array=1-200 ${script} ${model} ${n_samps}
         - sampled_edges`${rep}`.txt.gz
 
 > this files are just for checking if the demographic model worked properly...
+
+
 &nbsp;
 **SLiM log file**
 - `model_folder/replicate_folder`
