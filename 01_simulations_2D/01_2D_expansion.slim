@@ -1,0 +1,443 @@
+// RANGE EXPANSION - May 2020
+// set up
+initialize() {
+	
+	// starting the clock
+	defineConstant("start", clock());
+	/*
+	/////--------------->
+	
+	// command line constants to use in SLiM GUI if needed to debug
+	
+	// chromosome size
+	defineConstant("chrL", 100000000);
+	
+	// mutation rate
+	defineConstant("mu", 1.25e-8);
+	
+	// recombination rate
+	defineConstant("rho", 1e-8);
+	
+	// number of core demes
+	defineConstant("core", 1);
+	
+	// number of edge demes
+	//	defineConstant("edge", 5);
+	
+	// this is the carrying capacity
+	defineConstant("maxN", 100);
+	
+	//this is the migration rate to be used throughout the simulation. It should be the same for everything (core demes and wave demes)
+	defineConstant("migr", 0.05);
+	
+	// number of generations needed to reach carrying capacity (maxN)
+	defineConstant("tgrw", 5);
+	
+	// growth constant
+	defineConstant("r1", 0.6);
+	
+	// growth factor (exp(r*t), for t=1)
+	defineConstant("ert1", 1.82);
+	
+	// burn-in period in generations, before expansion starts
+	defineConstant("burnin", 50);
+	
+	
+	defineConstant("GridSize", 30);
+	
+	//this should be the number of deme in each size od the grid 
+	//(eg. if grid = 9, side = 3 (because 3*3 =9, and the grid is simetrical))
+	
+	defineConstant("GridSide", 10);
+
+	defineConstant("replicate", "10");
+
+   defineConstant("out", "/home/flavia/Dropbox/SLiM_results/May_2021/vcf_files");
+	
+	defineConstant("Fndrs", 10);
+	
+	defineConstant("out_mut_path", "/home/flavia/Dropbox/SLiM_results/May_2021/muts");
+	
+	defineConstant("out_pop_path", "/home/flavia/Dropbox/SLiM_results/May_2021/popsizes");
+
+    defineConstant("num_samples", 10);
+	
+	////////<-------------------------------------------------
+	*/
+	
+	// chromosome size
+	defineConstant("L", chrL);
+	
+	//the burn-in time
+	defineConstant("burn", burnin);
+	
+	//this is the number of founders (it is obviously determined by the max. number of individuals in the deme x the migration rate)
+	//defineConstant("founders", asInteger(migr*maxN));
+	
+	//time to reach saturation is tg generations
+	defineConstant("tg", tgrw);
+	defineConstant("t1", 1);
+	
+	// growth component (e^r1*t) (== exp(r1*t))
+	defineConstant("er1", ert1);
+	
+	// MUTATION and RECOMBINATION
+	initializeMutationRate(mu);
+	initializeRecombinationRate(rho);
+	
+	//--------> 2D ADDITIONS -------->
+	// Size of the grid of expansion (to define size of single core population)
+	// defineConstant("grid", GridSize);
+	
+	//this should be the number of deme in each size od the grid 
+	// defineConstant("side", GridSide);
+	
+	defineConstant("rep", replicate);
+
+	defineConstant("out_path", out);
+	
+	defineConstant("founders", Fndrs);
+
+	defineConstant("out_pop_path", out_pop);
+	defineConstant("burnin_path", burn_pop);
+    defineConstant("num_samples", nsamps);
+
+
+	initializeTreeSeq();
+
+	//<---------- end of 2D additions <--------
+	
+	
+	// neutral mutations
+	initializeMutationType("m1", 0.0, "f", 0);
+	m1.convertToSubstitution = F;
+	m1.mutationStackPolicy = "l";
+	m1.color = "red";
+	
+	// genomic elements
+	initializeGenomicElementType("g1", m1, 1.0);
+	initializeGenomicElement(g1, 0, (L-1));
+	
+}
+
+
+function (o<Subpopulation>)SWI(integer $id)
+{
+	subpops = sim.subpopulations;
+	subpop = subpops[subpops.id == id];
+	if (subpop.length() != 1)
+		stop("Lookup of subpop with index " + id + " failed.");
+	return subpop;
+}
+
+// this has to be substituted by burn_in core files
+s1 1 late () {
+	if (rho == 1e-8){
+		if (rep > 100){
+			rep_file=(rep-100);
+		} else if (rep <= 100){
+			rep_file=rep;
+		}
+	} else if (rho == 1e-9){
+		if (rep > 100){
+			rep_file=(rep+200);
+		} else if (rep <= 100){
+			rep_file=(rep+300);
+		}
+	} else if (rho == 1e-7){
+		if (rep > 100){
+			rep_file=(rep+400);
+		} else if (rep <= 100){
+			rep_file=(rep+500);
+		}
+	} else {
+		catn(asString("Wrong value of Recombination Rate (rho) to determnine correct burn-in file replicate number. Simulation Interrupted"));
+		sim.simulationFinished();
+	}
+
+
+	cat("------------------------- \n");
+	cat("sim_rep: " + rep + "\n");
+	cat("burn_rep: " + rep_file + "\n");
+	cat("burn - 1 : " + (burn -1) + "\n");
+    cat("------------------------- \n");
+	catn(asString("../" + burnin_path + "/out_" + "burnin_2D_c" + (core) + "_g" + (burn-1) + "_r" + rep_file + ".trees"));
+    sim.readFromPopulationFile(asString("../" + burnin_path + "/out_" + "burnin_2D_c" + (core) + "_g" + (burn-1) + "_r" + rep_file + ".trees"));
+	cat("Finished loading burn-in tree file \n");
+}
+
+
+
+// should be generation before end of burnin
+s2 _burn_in_ late () {
+	
+	sim.subpopulations.individuals.color="yellow";
+	sim.subpopulations.individuals[sim.subpopulations.individuals.migrant].color="blue";
+
+	//j is supposed to be here the last core deme (in case of one deme, is just the core deme...
+	j = asInteger(length(sim.subpopulations.id));
+	
+	
+	for (d in 1:side){
+		newPop = paste0("sim.addSubpop('p" +  (j+d) + "', founders);");
+		executeLambda(newPop);
+		
+		populate = paste0("p" + (j+d) + ".setMigrationRates(p" + (j) + ", 1);");
+		executeLambda(populate);
+	
+	}
+
+}
+
+
+s12 _burn_in_: late(){
+
+	// I want a list of the INDEX of the active populations
+	
+	actD = (sim.subpopulations.id);
+	actD=matrix(actD, nrow=1);
+	writeFile(asString(out_pop_path + "/active_demes"+ "_"+ rep + ".txt"), paste(actD[0,]), T);
+	
+
+	sizeD = sim.subpopulations.individualCount;
+	sizeD = matrix(sizeD, ncol=1);
+
+	numPop=length(sim.subpopulations.id);
+	gens=matrix(c(rep(sim.generation, numPop)),ncol=1);
+
+	tbl = matrix(c(gens, actD, sizeD), ncol=3);
+ 
+	for (i in 0:(length(tbl)/3)){
+    	if (i < (length(tbl)/3)){
+    		writeFile(asString(out_pop_path + "/popSizes"+ "_"+ rep + ".txt"), paste(tbl[i,]), T);}
+	else {break;}
+	}
+
+    
+}
+
+s4 _other_gens_ late(){
+		
+	iter=asInteger(((sim.generation-burn-100)/tg)+1);
+
+	last=((iter*side)+core);
+	first=(last)-(side-1);
+
+	catn("---------- |+| ----------");
+	catn("gen: " + sim.generation);
+	for (i in (first+1):last){
+		SWI(i-1).setMigrationRates(SWI(i), migr);
+		SWI(i).setMigrationRates(SWI(i-1), migr);
+		catn("from " + i + " to " + (i-1));
+		catn("from " + (i-1) + " to " + (i));
+	}
+	
+	for (i in first:last){
+		SWI(i).setMigrationRates(SWI(core), migr);
+		SWI(core).setMigrationRates(SWI(i), mig2p1);
+
+		catn("from " + core + " to " + (i) + " mig_rate: " + migr);
+		catn("from " + (i) + " to " + (core) + " mig_rate: " + mig2p1);
+	}
+	
+		SWI(first).setMigrationRates(SWI(last), migr);
+		SWI(last).setMigrationRates(SWI(first), migr);
+		catn("from " + last + " to " + (first));
+		catn("from " + (first) + " to " + (last));
+		catn("---------- |+| ----------");
+
+	sim.subpopulations.individuals.color="yellow";
+	sim.subpopulations.individuals[sim.subpopulations.individuals.migrant].color="blue";
+	
+}
+
+
+
+//END OF BURN-IN PHASE
+s5 _other_gens_: early () {
+
+	//this will only execute when generation is divisible by the growth time.
+	if ((sim.generation % tg) == 0){
+
+		actD = (sim.subpopulations.id);
+		actD=matrix(actD, nrow=1);
+		writeFile(asString(out_pop_path + "/active_demes_oneliner"+ "_"+ rep + ".txt"), paste(actD[0,]), T);
+
+		//get the id number of the last population created
+		j = asInteger(sim.subpopulations.id[length(sim.subpopulations.id)-1]);
+		
+		for (d in 1:side){
+			c=j+d;
+			newPop = paste0("sim.addSubpop('p" +  c + "', founders);");
+			executeLambda(newPop);
+			
+			populate = paste0("p" + c + ".setMigrationRates(p" + (c-side) + ", 1);");
+			executeLambda(populate);
+			sim.subpopulations.individuals.color="yellow";
+		    sim.subpopulations.individuals[sim.subpopulations.individuals.migrant].color="blue";
+		
+		}
+	}
+}
+
+s6 _other_gens_: late () {
+	
+	
+	if (sim.generation % tg == 0){
+		
+		iter = asInteger(((sim.generation-burn-100)/tg)+1);
+		last=((iter*side)+1);
+		first=(last)-(side-1);
+		
+		catn("---------- // ----------");
+		catn("gen: " + sim.generation);		
+		
+		for (i in (first+1):last){
+			
+			SWI(i-1).setMigrationRates(SWI(i), migr);
+			SWI(i).setMigrationRates(SWI(i-1), migr);
+			catn("from " + i + " to " + (i-1));
+			catn("from " + (i-1) + " to " + (i));
+		}
+		
+		for (i in first:last){
+			SWI(i).setMigrationRates(SWI(i-side), migr);
+			SWI(i-side).setMigrationRates(SWI(i), migr);
+			
+			catn("from " + i + " to " + (i-side));
+			catn("from " + (i-side) + " to " + (i));
+		}
+
+		SWI(first).setMigrationRates(SWI(last), migr);
+		SWI(last).setMigrationRates(SWI(first), migr);
+		catn("from " + last + " to " + (first));
+		catn("from " + (first) + " to " + (last));
+	
+	}
+	
+	sim.subpopulations.individuals.color="yellow";
+	sim.subpopulations.individuals[sim.subpopulations.individuals.migrant].color="blue";
+
+}
+
+
+
+s7 _burn_in_: late (){
+	
+	if (sim.generation % tg == 0){
+		
+		//last pops created			
+		iter = asInteger(((sim.generation-burn-100)/tg)+1);
+		last=((iter*side)+1);
+		first=(last)-(side-1);
+		
+		sim.setValue("ini", sim.generation);
+		sim.setValue("side_last", last);
+		sim.setValue("side_first", first);
+	}
+	
+	if (sim.generation % tg == 0){
+		if (tg == 5){
+			sim.setValue("gen_to_samp", sim.generation);
+			sim.setValue("gen_plus_three", (sim.getValue("gen_to_samp")+3));
+		}
+	}
+
+	sim.subpopulations.individuals.color="yellow";
+	sim.subpopulations.individuals[sim.subpopulations.individuals.migrant].color="blue";
+
+}
+
+s8 _other_gens_: late(){
+	
+	kct = sim.getValue("ini") + tg + 1;
+	
+	if (sim.generation <= kct) {
+		p_last = sim.getValue("side_last");
+		p_first = sim.getValue("side_first");
+		
+		for(pop in p_first:p_last){
+			to_grow = paste0("round(p" + pop + ".individualCount * " + er1 + ");");
+			newSize = executeLambda(to_grow);
+			
+			if (newSize < maxN){
+				growth = paste0("p"+ pop + ".setSubpopulationSize(" + newSize + ");");
+				executeLambda(growth);
+				count = executeLambda(paste0("asInteger(p" + pop + ".individualCount);"));
+				sim.setValue("nPop", size(asString(sim.	subpopulations.id)));
+			
+			} else {
+				growth = paste0("p" + pop + ".setSubpopulationSize(" + maxN + ");");
+				executeLambda(growth);
+			}
+		}
+	}
+	sim.subpopulations.individuals.color="yellow";
+	sim.subpopulations.individuals[sim.subpopulations.individuals.migrant].color="blue";
+
+}
+
+s9 _other_gens_: late(){
+	if ((sim.generation % (tg) == 0)|(sim.generation == burn+100)){
+		idp=sim.subpopulations.id;
+		iter = asInteger(((sim.generation-burn-100)/tg)+1);
+		
+		
+		catn("iteration number " + iter);
+		if ((side % 2 == 0)|(side == 3)){
+			print("side is pair or == to 3");
+			tosamp=(iter*side);
+		} else {
+			print("side is odd");
+			tosamp=(iter*side)-1;
+		}
+
+	}
+
+
+	x3=sim.getValue("gen_plus_three");
+	if (sim.generation == x3){
+		// idp=sim.subpopulations.id;
+		
+		// z=(length(sim.subpopulations.id)-1);
+    	// sampVCF2=paste0("p"+ idp[z] +".outputVCFSample(" + num_samples + ", replace=F, outputMultiallelics=T, filePath='" + out_path +"/out_p" + idp[z] + "_gen_" + sim.generation + ".vcf', append= F);");
+    	// executeLambda(sampVCF2);
+
+		// SAMPLE VCF FILE ON THE MID-EDGE DEME
+	    edge5 = sim.subpopulations.id[length(sim.subpopulations.id)- asInteger((((side/2)+1)))]; 
+
+	    tab = matrix(edge5, ncol=1);
+	    writeFile(asString(out_pop_path + "/sampled_edges"+ "_"+ rep + ".txt"), paste(tab[0,]), T);
+    
+        SWI(edge5).outputVCFSample(asInteger(num_samples), replace=F, outputMultiallelics=T, filePath=asString(out_path + "/ out_gen_" + sim.generation + "_p" + edge5 + ".vcf"), append= F);
+        print(asString("p"+ (edge5) + ".outputVCFSample(" + num_samples + ", replace=F, outputMultiallelics=T,  filePath=asString("+ out_path + "/out_gen_" + sim.generation + "_p" + (edge5) + ".vcf), append= F)"));
+	}	
+}
+
+s10 _other_gens_: {
+	iter = asInteger(((sim.generation-burn-100)/tg)+1);
+	
+	if (size(asString(sim.subpopulations.id)) == (grid + core)){
+			idpop = sim.subpopulations.id;
+			for (i in 0:(core-1)){
+				kill = paste0("p" + idpop[i] + ".setSubpopulationSize(0);");
+				executeLambda(kill);}
+	}
+				
+	if (size(asString(sim.subpopulations.id)) > (grid)){
+		idpop = sim.subpopulations.id;
+		for (d in 0:(side-1)){
+			kill = paste0("p" + idpop[d] + ".setSubpopulationSize(0);");
+			executeLambda(kill);}
+	}
+}
+
+
+s11 _end_sim_ late(){
+	sim.outputUsage();
+	defineConstant("fim", clock());
+	duration = fim - start;
+	sim.treeSeqOutput(asString(out_path + "/out_gen_" + sim.generation + "_grid_" + (side*side) + "_r" + rep + "_final_generation.trees"));
+	catn(asString("sim with total duration of " + duration));
+	sim.simulationFinished();
+}
