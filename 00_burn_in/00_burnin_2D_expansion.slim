@@ -1,0 +1,128 @@
+// RANGE EXPANSION - trials of MARCH 2020
+// set up
+initialize() {
+	// starting the clock
+	defineConstant("start", clock());
+	
+	/* 
+	// command line constants to use in SLiM GUI if needed to debug
+	
+	// chromosome size
+	defineConstant("chrL", 100000);
+	
+	// mutation rate
+	defineConstant("mu", 1.25e-8);
+	
+	// recombination rate
+	defineConstant("rho", 1e-8);
+	
+	// number of core demes
+	defineConstant("core", 5);
+
+	// number of edge demes
+	defineConstant("edge", 5);
+
+	// this is the carrying capacity
+	defineConstant("maxN", 100);
+
+	//this is the migration rate to be used throughout the simulation. It should be the same for everything (core demes and wave demes)
+	defineConstant("migr", 0.1);
+
+	// number of generations needed to reach carrying capacity (maxN)
+	defineConstant("tgrw", 5);
+
+	// growth constant
+	defineConstant("r1", 0.35);
+	
+	// growth factor (exp(r*t), for t=1)
+	defineConstant("ert1", 1.80);
+
+	// burn-in period in generations, before expansion starts
+	defineConstant("burnin", 50);
+
+
+    // defineConstant("GridSize", 9);
+	//this should be the number of deme in each size od the grid 
+	//(eg. if grid = 9, side = 3 (because 3*3 =9, and the grid is simetrical))
+	// defineConstant("GridSide", 3);
+
+	defineConstant("replicate", 1);
+
+    defineConstant("out", "/home/flavia/SLiM_GUI_outputs/Aug_Sept_2020/vcf_files");
+	
+	defineConstant("Fndrs", 20);
+	
+*/
+////////<-------------------------------------------------
+
+	// chromosome size
+	defineConstant("L", chrL);
+
+	//the burn-in time
+	defineConstant("burn", burnin);
+
+	// MUTATION and RECOMBINATION
+	initializeMutationRate(mu);
+	initializeRecombinationRate(rho);
+
+
+	defineConstant("rep", replicate);
+
+
+	defineConstant("out_path", out);
+
+
+	initializeTreeSeq();
+
+
+	// neutral mutations
+	initializeMutationType("m1", 0.0, "f", 0);
+	m1.convertToSubstitution = T;
+	m1.mutationStackPolicy = "l";
+	m1.color = "red";
+
+	// genomic elements
+	initializeGenomicElementType("g1", m1, 1.0);
+	initializeGenomicElement(g1, 0, (L-1));
+
+}
+
+function (o<Subpopulation>)SWI(integer $id)
+{
+	subpops = sim.subpopulations;
+	subpop = subpops[subpops.id == id];
+	if (subpop.length() != 1)
+		stop("Lookup of subpop with index " + id + " failed.");
+	return subpop;
+}
+
+
+s1 1 early () {
+	
+	//These are the core demes, so they begin at a fixed size to evolve contantly to equilibrium 
+	sim.addSubpop('p1', (maxN*5));
+}
+
+s3 1: late(){
+	if (sim.generation % 1000 == 0){
+		catn("--------------------------------------------");
+		catn("cur_gen: " + sim.generation + " | time passed: " + (clock() - start));
+		catn("--------------------------------------------");
+	
+	}
+
+}
+
+
+
+s2 _minus_one_ late(){
+    sim.treeSeqOutput(asString(out_path + "/out_" + "burnin_2D_c" + (core) + "_g" + sim.generation + "_r" + rep + ".trees"));
+
+	sim.outputUsage();
+
+	defineConstant("fim", clock());
+	duration = fim - start;
+	catn(asString("sim with total duration of " + duration));
+
+	sim.simulationFinished();
+}
